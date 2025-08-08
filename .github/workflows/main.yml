@@ -1,65 +1,111 @@
-name: GKE Microservice Deploy
+name: Deploy Microservice to GKE
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 env:
-  PROJECT_ID: able-armor-468408-v6     # 🔹 Replace with your GCP project ID
-  GKE_CLUSTER: my-private-cluster      # 🔹 Replace with your cluster name
-  GKE_ZONE: asia-south1-a               # 🔹 Replace with your cluster location
-  HELM_RELEASE: microservice
-  HELM_CHART_PATH: ./helm/microservice
-  TF_DIR: ./terraform
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+  CLUSTER_ZONE: ${{ secrets.GKE_CLUSTER_ZONE }}         # e.g., us-central1-a
+  STATIC_IP_REGION: ${{ secrets.GKE_STATIC_IP_REGION }} # e.g., us-central1
+  STATIC_IP_NAME: ${{ secrets.GKE_STATIC_IP_NAME }}
+  RELEASE_NAME: microservice
+  NAMESPACE: default
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout code
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    # 1. Checkout repo
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      # 2️⃣ Authenticate with GCP
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+    # 2. Authenticate to Google Cloud
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      # 3️⃣ Set gcloud project
-      - name: Set GCP Project
-        run: gcloud config set project $PROJECT_ID
+    # 3. Setup gcloud CLI
+    - name: Set up gcloud CLI
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+        export_default_credentials: true
 
-      # 4️⃣ Terraform Init & Apply
-      - name: Terraform Init
-        run: |
-          cd $TF_DIR
-          terraform init
+    # 4. Install GKE gcloud auth plugin
+    - name: Install GKE gcloud auth plugin
+      run: |
+        gcloud components install gke-gcloud-auth-plugin --quiet
+        echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
 
-      - name: Terraform Apply
-        run: |
-          cd $TF_DIR
-          terraform apply -auto-approve
+    # 5. Get GKE credentials
+    - name: Get GKE Credentials
+      run: |
+        gcloud container clusters get-credentials $CLUSTER_NAME \
+          --zone $CLUSTER_ZONE \
+          --project $PROJECT_ID
 
-      # 5️⃣ Connect to GKE
-      - name: Get GKE Credentials
-        run: gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE --project $PROJECT_ID
+    # 6. Install NGINX Ingress Controller (if not already installed)
+    - name: Install NGINX Ingress Controller
+      run: |
+        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+        echo "Waiting for ingress-nginx-controller deployment to be available..."
+        kubectl wait --namespace ingress-nginx \
+          --for=condition=available deployment/ingress-nginx-controller \
+          --timeout=180s
 
-      # 6️⃣ Install Helm
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.14.0
+    # 7. Wait for LoadBalancer IP for ingress-nginx-controller service
+    - name: Wait for LoadBalancer IP
+      id: wait-ip
+      run: |
+        echo "⏳ Waiting for ingress controller external IP..."
+        for i in {1..30}; do
+          IP=$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          if [ -n "$IP" ]; then
+            echo "✅ Ingress controller external IP: $IP"
+            echo "INGRESS_IP=$IP" >> $GITHUB_ENV
+            echo "::set-output name=INGRESS_IP::$IP"
+            break
+          fi
+          echo "Still waiting for LoadBalancer IP... ($i/30)"
+          sleep 10
+        done
 
-      # 7️⃣ Deploy via Helm
-      - name: Deploy Helm Chart
-        run: |
-          helm upgrade --install $HELM_RELEASE $HELM_CHART_PATH -f $HELM_CHART_PATH/values.yaml
+    # 8. Fetch static IP from GCP for Helm ingress annotation
+    - name: Get Static IP Address
+      id: get-ip
+      run: |
+        IP_ADDRESS=$(gcloud compute addresses describe $STATIC_IP_NAME \
+          --region $STATIC_IP_REGION \
+          --format="value(address)")
+        if [ -z "$IP_ADDRESS" ]; then
+          echo "❌ ERROR: Static IP not found in region $STATIC_IP_REGION"
+          exit 1
+        fi
+        echo "STATIC_IP=$IP_ADDRESS" >> $GITHUB_ENV
+        echo "✅ Using Static IP: $IP_ADDRESS"
 
-      # 8️⃣ Verify Ingress
-      - name: Check Ingress
-        run: kubectl get ingress -A
+    # 9. Deploy microservice Helm chart
+    - name: Deploy Microservice via Helm
+      run: |
+        helm upgrade --install $RELEASE_NAME ./helm/microservice \
+          --namespace $NAMESPACE \
+          --create-namespace \
+          --set ingress.enabled=true \
+          --set ingress.className=nginx \
+          --set ingress.annotations."kubernetes\.io/ingress\.global-static-ip-name"=$STATIC_IP_NAME \
+          --set ingress.hosts[0].host=${STATIC_IP}.nip.io \
+          --set ingress.hosts[0].paths[0].path="/" \
+          --set ingress.hosts[0].paths[0].pathType=Prefix
+
+    # 10. Verify deployment rollout
+    - name: Verify Deployment
+      run: |
+        echo "⏳ Waiting for pods to be ready..."
+        kubectl rollout status deployment/$RELEASE_NAME -n $NAMESPACE --timeout=120s
+        echo "📜 Listing pods, svc, ingress in namespace $NAMESPACE"
+        kubectl get pods,svc,ingress -n $NAMESPACE
+        echo "🌐 Test your app at http://${STATIC_IP}.nip.io"
 
