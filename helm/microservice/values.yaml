@@ -13,7 +13,7 @@ ingress:
   enabled: true   # Enable ingress
   className: "gce"  # Use GCP HTTP(S) Load Balancer
   annotations:
-    kubernetes.io/ingress.global-static-ip-name: "microservice-ip"  # NAME of your reserved static IP in GCP
+    kubernetes.io/ingress.global-static-ip-name: "gke-static-ip"  # NAME of your reserved static IP in GCP
   hosts:
     - host: "34.61.5.89.nip.io"
       paths:
