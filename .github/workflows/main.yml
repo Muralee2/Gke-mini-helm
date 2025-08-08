@@ -42,47 +42,26 @@ jobs:
           --zone $CLUSTER_ZONE \
           --project $PROJECT_ID
 
-    - name: Install NGINX Ingress Controller
+    - name: Install GKE Ingress Controller (GCE)
       run: |
-        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
-        echo "Waiting for ingress-nginx-controller deployment to be available..."
-        kubectl wait --namespace ingress-nginx \
-          --for=condition=available deployment/ingress-nginx-controller \
-          --timeout=180s
+        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-gce/main/deploy/static/mandatory.yaml
+        echo "Waiting for GCE ingress controller..."
+        kubectl wait deployment l7-default-backend -n kube-system --for=condition=available --timeout=180s || true
 
-    - name: Wait for LoadBalancer IP
-      id: wait-ip
+    - name: Wait for Static IP to be Reserved
       run: |
-        echo "⏳ Waiting for ingress controller external IP..."
-        for i in {1..30}; do
-          IP=$(kubectl get svc ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-          if [ -n "$IP" ]; then
-            echo "✅ Ingress controller external IP: $IP"
-            echo "INGRESS_IP=$IP" >> $GITHUB_ENV
-            echo "::set-output name=INGRESS_IP::$IP"
-            break
-          fi
-          echo "Still waiting for LoadBalancer IP... ($i/30)"
-          sleep 10
-        done
-
-    - name: Get Static IP Address
-      id: get-ip
-      run: |
-        IP_ADDRESS=$(gcloud compute addresses describe $STATIC_IP_NAME \
+        IP=$(gcloud compute addresses describe $STATIC_IP_NAME \
           --region $STATIC_IP_REGION \
           --format="value(address)")
-        if [ -z "$IP_ADDRESS" ]; then
+        if [ -z "$IP" ]; then
           echo "❌ ERROR: Static IP not found in region $STATIC_IP_REGION"
           exit 1
         fi
-        echo "STATIC_IP=$IP_ADDRESS" >> $GITHUB_ENV
-        echo "::set-output name=STATIC_IP::$IP_ADDRESS"
-        echo "✅ Using Static IP: $IP_ADDRESS"
+        echo "✅ Static IP: $IP"
+        echo "STATIC_IP=$IP" >> $GITHUB_ENV
 
-    - name: Deploy Microservice via Helm
+    - name: Deploy Microservice with Helm
       run: |
         helm upgrade --install $RELEASE_NAME ./helm/microservice \
           -f ./helm/microservice/values.yaml \
           --namespace $NAMESPACE --create-namespace
-
