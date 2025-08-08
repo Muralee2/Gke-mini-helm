@@ -6,16 +6,17 @@ image:
   pullPolicy: IfNotPresent
 
 service:
-  type: ClusterIP
+  type: LoadBalancer       # ✅ Changed from ClusterIP
   port: 80
 
 ingress:
-  enabled: true
-  className: gce
+  enabled: false           # ❌ Disable Ingress for now
+  className: "gce"
   annotations:
-    kubernetes.io/ingress.global-static-ip-name: gke-static-ip
+    kubernetes.io/ingress.global-static-ip-name: "gke-static-ip"
   hosts:
-    - host: 34.61.5.89.nip.io
+    - host: "34.61.5.89.nip.io"
       paths:
         - path: /
           pathType: Prefix
+  tls: []
