@@ -1,14 +1,21 @@
+replicaCount: 1
+
+image:
+  repository: nginx
+  tag: "1.25.3"
+  pullPolicy: IfNotPresent
+
 service:
-  type: ClusterIP  # ✅ Required for GKE Ingress
+  type: ClusterIP
+  port: 80
 
 ingress:
-  enabled: true    # ✅ Enable Ingress
-  className: gce   # ✅ For GKE, "gce" is valid
+  enabled: true
+  className: gce
   annotations:
-    kubernetes.io/ingress.global-static-ip-name: gke-static-ip  # ✅ Binds Ingress to your reserved static IP
+    kubernetes.io/ingress.global-static-ip-name: gke-static-ip
   hosts:
-    - host: 34.61.5.89.nip.io  # ✅ nip.io maps to your static IP
+    - host: 34.61.5.89.nip.io
       paths:
         - path: /
           pathType: Prefix
-
