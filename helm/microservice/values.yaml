@@ -1,23 +1,14 @@
-replicaCount: 1
-
-image:
-  repository: nginx
-  tag: "1.25.3"
-  pullPolicy: IfNotPresent
-
 service:
-  type: LoadBalancer       # ✅ Changed from ClusterIP
-  port: 80
+  type: ClusterIP  # ✅ Required for GKE Ingress
 
 ingress:
-  enabled: false           # ❌ Disable Ingress for now
-  className: "gce"
+  enabled: true    # ✅ Enable Ingress
+  className: gce   # ✅ For GKE, "gce" is valid
   annotations:
-    kubernetes.io/ingress.global-static-ip-name: "gke-static-ip"
+    kubernetes.io/ingress.global-static-ip-name: gke-static-ip  # ✅ Binds Ingress to your reserved static IP
   hosts:
-    - host: "34.61.5.89.nip.io"
+    - host: 34.61.5.89.nip.io  # ✅ nip.io maps to your static IP
       paths:
         - path: /
           pathType: Prefix
-  tls: []
 
