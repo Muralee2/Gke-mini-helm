@@ -11,12 +11,15 @@ service:
 
 ingress:
   enabled: true
-  className: "nginx"
-  annotations: {}
+  className: nginx
   hosts:
-    - host: "34.61.5.89.nip.io"   # Replace with your static IP + .nip.io
+    - host: 34.123.45.67.nip.io
       paths:
         - path: /
           pathType: Prefix
-  tls: []
+          backend:
+            service:
+              name: microservice
+              port:
+                number: 80
 
