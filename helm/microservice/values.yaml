@@ -12,14 +12,12 @@ service:
 ingress:
   enabled: true
   className: nginx
-  hosts:
-    - host: 34.123.45.67.nip.io
-      paths:
-        - path: /
-          pathType: Prefix
-          backend:
-            service:
-              name: microservice
-              port:
+  host: "34.10.246.130.nip.io"
+  annotations: {}
+  tls:
+    enabled: true
+    clusterIssuer: letsencrypt-prod
+    secretName: microservice-tls
+
                 number: 80
 
