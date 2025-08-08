@@ -1,17 +1,14 @@
 {{/*
-Return the app name
+Generate standard labels for microservice
 */}}
-{{- define "microservice.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
+{{- define "microservice.labels" -}}
+app.kubernetes.io/name: {{ include "microservice.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
 
 {{/*
-Return a fullname for resources
+Chart name
 */}}
-{{- define "microservice.fullname" -}}
-{{- if .Values.fullnameOverride -}}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
-{{- else -}}
-{{- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-{{- end -}}
+{{- define "microservice.name" -}}
+{{ .Chart.Name }}
+{{- end }}
