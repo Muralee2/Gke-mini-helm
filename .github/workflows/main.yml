@@ -1,67 +1,65 @@
-name: Deploy Microservice to GKE
+name: GKE Microservice Deploy
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
-  CLUSTER_ZONE: ${{ secrets.GKE_CLUSTER_ZONE }}
-  STATIC_IP_REGION: ${{ secrets.GKE_STATIC_IP_REGION }}
-  STATIC_IP_NAME: ${{ secrets.GKE_STATIC_IP_NAME }}
-  RELEASE_NAME: microservice
-  NAMESPACE: default
+  PROJECT_ID: able-armor-468408-v6     # 🔹 Replace with your GCP project ID
+  GKE_CLUSTER: my-private-cluster      # 🔹 Replace with your cluster name
+  GKE_ZONE: asia-south1-a               # 🔹 Replace with your cluster location
+  HELM_RELEASE: microservice
+  HELM_CHART_PATH: ./helm/microservice
+  TF_DIR: ./terraform
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      # 1️⃣ Checkout code
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
+      # 2️⃣ Authenticate with GCP
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Set up gcloud CLI
-      uses: google-github-actions/setup-gcloud@v2
-      with:
-        project_id: ${{ env.PROJECT_ID }}
-        export_default_credentials: true
+      # 3️⃣ Set gcloud project
+      - name: Set GCP Project
+        run: gcloud config set project $PROJECT_ID
 
-    - name: Install GKE gcloud auth plugin
-      run: |
-        gcloud components install gke-gcloud-auth-plugin --quiet
-        echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
+      # 4️⃣ Terraform Init & Apply
+      - name: Terraform Init
+        run: |
+          cd $TF_DIR
+          terraform init
 
-    - name: Get GKE Credentials
-      run: |
-        gcloud container clusters get-credentials $CLUSTER_NAME \
-          --zone $CLUSTER_ZONE \
-          --project $PROJECT_ID
+      - name: Terraform Apply
+        run: |
+          cd $TF_DIR
+          terraform apply -auto-approve
 
-    - name: Install GKE Ingress Controller (GCE)
-      run: |
-        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-gce/main/deploy/static/mandatory.yaml
-        echo "Waiting for GCE ingress controller..."
-        kubectl wait deployment l7-default-backend -n kube-system --for=condition=available --timeout=180s || true
+      # 5️⃣ Connect to GKE
+      - name: Get GKE Credentials
+        run: gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE --project $PROJECT_ID
 
-    - name: Wait for Static IP to be Reserved
-      run: |
-        IP=$(gcloud compute addresses describe $STATIC_IP_NAME \
-          --region $STATIC_IP_REGION \
-          --format="value(address)")
-        if [ -z "$IP" ]; then
-          echo "❌ ERROR: Static IP not found in region $STATIC_IP_REGION"
-          exit 1
-        fi
-        echo "✅ Static IP: $IP"
-        echo "STATIC_IP=$IP" >> $GITHUB_ENV
+      # 6️⃣ Install Helm
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
 
-    - name: Deploy Microservice with Helm
-      run: |
-        helm upgrade --install $RELEASE_NAME ./helm/microservice \
-          -f ./helm/microservice/values.yaml \
-          --namespace $NAMESPACE --create-namespace
+      # 7️⃣ Deploy via Helm
+      - name: Deploy Helm Chart
+        run: |
+          helm upgrade --install $HELM_RELEASE $HELM_CHART_PATH -f $HELM_CHART_PATH/values.yaml
+
+      # 8️⃣ Verify Ingress
+      - name: Check Ingress
+        run: kubectl get ingress -A
+
