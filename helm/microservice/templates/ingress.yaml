@@ -2,33 +2,30 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "microservice.fullname" . }}-ingress
-  labels:
-    {{- include "microservice.labels" . | nindent 4 }}
+  name: {{ include "microservice.fullname" . }}
   annotations:
-    kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
-    {{- if .Values.ingress.tls.enabled }}
-    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | quote }}
-    {{- end }}
-    {{- with .Values.ingress.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+    {{ $key }}: {{ $value | quote }}
     {{- end }}
 spec:
-  {{- if .Values.ingress.tls.enabled }}
-  tls:
-    - hosts:
-        - {{ .Values.ingress.host | quote }}
-      secretName: {{ .Values.ingress.tls.secretName | quote }}
-  {{- end }}
+  ingressClassName: {{ .Values.ingress.className }}
   rules:
-    - host: {{ .Values.ingress.host | quote }}
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host }}
       http:
         paths:
-          - path: /
-            pathType: Prefix
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "microservice.fullname" . }}
+                name: {{ include "microservice.fullname" $ }}
                 port:
-                  number: {{ .Values.service.port }}
+                  number: {{ $.Values.service.port }}
+          {{- end }}
+    {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
 {{- end }}
