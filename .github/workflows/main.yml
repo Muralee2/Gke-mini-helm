@@ -1,0 +1,52 @@
+name: Deploy Microservice to GKE
+
+on:
+  workflow_dispatch:   # Manual trigger
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+  CLUSTER_REGION: ${{ secrets.GKE_CLUSTER_REGION }}
+  STATIC_IP_NAME: ${{ secrets.GKE_STATIC_IP_NAME }}
+  RELEASE_NAME: microservice
+  NAMESPACE: default
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up gcloud CLI
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ env.PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+
+    - name: Get GKE Credentials
+      run: |
+        gcloud container clusters get-credentials $CLUSTER_NAME --region $CLUSTER_REGION --project $PROJECT_ID
+
+    - name: Get Static IP Address
+      id: get-ip
+      run: |
+        IP_ADDRESS=$(gcloud compute addresses describe $STATIC_IP_NAME \
+          --region $CLUSTER_REGION \
+          --format="value(address)")
+        echo "STATIC_IP=$IP_ADDRESS" >> $GITHUB_ENV
+
+    - name: Install Helm
+      uses: azure/setup-helm@v4
+
+    - name: Deploy Microservice via Helm
+      run: |
+        helm upgrade --install $RELEASE_NAME ./helm/microservice \
+          --namespace $NAMESPACE \
+          --create-namespace \
+          --set ingress.enabled=true \
+          --set ingress.className=nginx \
+          --set ingress.annotations."kubernetes\.io/ingress\.global-static-ip-name"=$STATIC_IP_NAME \
+          --set ingress.hosts[0].host=${STATIC_IP}.nip.io
