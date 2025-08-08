@@ -83,4 +83,6 @@ jobs:
     - name: Deploy Microservice via Helm
       run: |
         helm upgrade --install $RELEASE_NAME ./helm/microservice \
+          -f ./helm/microservice/values.yaml \
+          --namespace $NAMESPACE --create-namespace
 
