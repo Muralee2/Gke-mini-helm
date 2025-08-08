@@ -10,12 +10,13 @@ service:
   port: 80
 
 ingress:
-  enabled: false  # will be overridden in GitHub Actions
-  className: nginx
+  enabled: true
+  className: "nginx"
   annotations: {}
   hosts:
-    - host: ""
+    - host: "34.61.5.89.nip.io"   # Replace with your static IP + .nip.io
       paths:
         - path: /
           pathType: Prefix
   tls: []
+
