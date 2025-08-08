@@ -1,8 +1,8 @@
-replicaCount: 1
+replicaCount: 2
 
 image:
   repository: nginx
-  tag: "1.25.3"
+  tag: "1.21.6"
   pullPolicy: IfNotPresent
 
 service:
@@ -12,12 +12,11 @@ service:
 ingress:
   enabled: true
   className: nginx
-  host: "34.10.246.130.nip.io"
-  annotations: {}
-  tls:
-    enabled: true
-    clusterIssuer: letsencrypt-prod
-    secretName: microservice-tls
-
-                number: 80
-
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  hosts:
+    - host: myapp.34.120.50.10.nip.io  # Replace with your ingress external IP + nip.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []  # Example: - secretName: tls-secret
