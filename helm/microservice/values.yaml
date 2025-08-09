@@ -2,21 +2,18 @@ replicaCount: 1
 
 image:
   repository: nginx
-  tag: "1.25.3"
+  tag: "1.25.0"
   pullPolicy: IfNotPresent
 
 service:
-  type: ClusterIP         # ✅ Ingress works with ClusterIP
+  type: ClusterIP
   port: 80
 
 ingress:
-  enabled: true           # ✅ Enable Ingress
-  className: gce          # ✅ For GKE
-  annotations:
-    kubernetes.io/ingress.global-static-ip-name: gke-static-ip  # ✅ Binds to reserved IP
-  hosts:
-    - host: 34.61.5.89.nip.io
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
+  enabled: true
+  className: "nginx"
+  staticIP: "34.61.5.89" # replace with your GCP static IP
+  path: /
+  pathType: Prefix
+
+resources: {}
