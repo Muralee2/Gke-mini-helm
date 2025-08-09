@@ -2,20 +2,18 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "microservice.fullname" . }}
-  labels:
-    app: {{ include "microservice.name" . }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: {{ include "microservice.name" . }}
+      app: {{ include "microservice.fullname" . }}
   template:
     metadata:
       labels:
-        app: {{ include "microservice.name" . }}
+        app: {{ include "microservice.fullname" . }}
     spec:
       containers:
-        - name: {{ .Chart.Name }}
+        - name: nginx
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
