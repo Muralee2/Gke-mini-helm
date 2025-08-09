@@ -4,8 +4,9 @@ metadata:
   name: {{ include "microservice.fullname" . }}
 spec:
   type: {{ .Values.service.type }}
-  selector:
-    app: {{ include "microservice.name" . }}
   ports:
     - port: {{ .Values.service.port }}
       targetPort: 80
+      protocol: TCP
+  selector:
+    app: {{ include "microservice.fullname" . }}
