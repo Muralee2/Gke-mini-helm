@@ -1,56 +1,57 @@
-name: Deploy NGINX to GKE with Static IP
+name: Deploy Nginx to GKE
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout code
+      # Step 1: Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Authenticate to Google Cloud
-      - name: Authenticate to Google Cloud
+      # Step 2: Authenticate to GCP
+      - name: Set up GCP authentication
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Set GCP Project
-        run: gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
-
-      # Connect to GKE
+      # Step 3: Get GKE cluster credentials
       - name: Get GKE credentials
-        run: gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} --zone ${{ secrets.GKE_CLUSTER_ZONE }}
-
-      # Install Helm
-      - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: google-github-actions/get-gke-credentials@v2
         with:
-          version: v3.14.0
+          cluster_name: ${{ secrets.GKE_CLUSTER_NAME }}
+          location: ${{ secrets.GKE_CLUSTER_ZONE }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      # Deploy with Helm using static IP
-      - name: Deploy NGINX with Static IP
+      # Step 4: Get static IP from GCP
+      - name: Get static IP address
+        id: get-ip
+        run: |
+          IP=$(gcloud compute addresses describe ${{ secrets.GKE_STATIC_IP_NAME }} \
+            --region=${{ secrets.GKE_STATIC_IP_REGION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }} \
+            --format='value(address)')
+          echo "STATIC_IP=$IP" >> $GITHUB_ENV
+
+      # Step 5: Install Helm
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      # Step 6: Deploy Helm chart with static IP + nip.io
+      - name: Deploy Nginx via Helm
         run: |
           helm upgrade --install mynginx ./nginx-staticip \
-            --set ingress.enabled=true \
-            --set ingress.className=gce \
-            --set ingress.annotations."kubernetes\.io/ingress\.global-static-ip-name"=${{ secrets.GKE_STATIC_IP_NAME }}
+            --set service.loadBalancerIP=${{ env.STATIC_IP }} \
+            --set ingress.hosts[0].host=${{ env.STATIC_IP }}.nip.io \
+            --set ingress.hosts[0].paths[0].path="/" \
+            --set ingress.hosts[0].paths[0].pathType=ImplementationSpecific
 
-      # Verify Ingress
-      - name: Verify Ingress IP
-        run: |
-          echo "Waiting for NGINX deployment to be ready..."
-          kubectl wait --for=condition=available --timeout=300s deployment/mynginx
-          kubectl get ingress
-
-      # Show reserved static IP from GCP
-      - name: Show Reserved Static IP
-        run: |
-          echo "Fetching reserved static IP from GCP..."
-          STATIC_IP=$(gcloud compute addresses describe ${{ secrets.GKE_STATIC_IP_NAME }} --region=${{ secrets.GKE_STATIC_IP_REGION }} --format="get(address)")
-          echo "✅ Your NGINX is available at: http://$STATIC_IP"
+      # Step 7: Output URL
+      - name: Show Nginx URL
+        run: echo "Nginx available at http://${{ env.STATIC_IP }}.nip.io"
