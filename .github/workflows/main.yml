@@ -25,15 +25,15 @@ jobs:
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
         with:
-          cluster_name: YOUR_GKE_CLUSTER_NAME
-          location: YOUR_GKE_CLUSTER_REGION_OR_ZONE
-          project_id: YOUR_GCP_PROJECT_ID
+          cluster_name: GKE_CLUSTER_NAME
+          location: GKE_CLUSTER_ZONE
+          project_id: GCP_PROJECT_ID
 
       # Step 4: Get static IP from GCP
       - name: Get static IP address
         id: get-ip
         run: |
-          IP=$(gcloud compute addresses describe YOUR_STATIC_IP_NAME \
+          IP=$(gcloud compute addresses describe GKE_STATIC_IP_NAME \
             --region=YOUR_REGION \
             --format='value(address)')
           echo "STATIC_IP=$IP" >> $GITHUB_ENV
@@ -46,8 +46,8 @@ jobs:
       - name: Deploy Nginx via Helm
         run: |
           helm upgrade --install mynginx ./nginx-staticip \
-            --set service.loadBalancerIP=${{ env.STATIC_IP }} \
-            --set ingress.hosts[0].host=${{ env.STATIC_IP }}.nip.io \
+            --set service.loadBalancerIP=${{ env.GKE_STATIC_IP_NAME }} \
+            --set ingress.hosts[0].host=${{ env.GKE_STATIC_IP_NAME }}.nip.io \
             --set ingress.hosts[0].paths[0].path="/" \
             --set ingress.hosts[0].paths[0].pathType=ImplementationSpecific
 
