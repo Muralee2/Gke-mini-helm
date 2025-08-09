@@ -1,19 +1,12 @@
-replicaCount: 1
-
-image:
-  repository: nginx
-  tag: "1.25.0"
-  pullPolicy: IfNotPresent
-
-service:
-  type: ClusterIP
-  port: 80
-
-ingress:
-  enabled: true
-  className: "nginx"
-  staticIP: "34.61.5.89" # replace with your GCP static IP
-  path: /
-  pathType: Prefix
-
-resources: {}
+apiVersion: v1
+kind: Service
+metadata:
+  name: microservice-microservice
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 34.61.5.89  # Optional: only if you reserved a static IP in GCP
+  selector:
+    app: microservice
+  ports:
+    - port: 80
+      targetPort: 80
