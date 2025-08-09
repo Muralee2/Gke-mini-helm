@@ -1,12 +1,15 @@
-apiVersion: v1
-kind: Service
-metadata:
-  name: microservice-microservice
-spec:
-  type: LoadBalancer
-  loadBalancerIP: 34.61.5.89  # Optional: only if you reserved a static IP in GCP
-  selector:
-    app: microservice
-  ports:
-    - port: 80
-      targetPort: 80
+replicaCount: 1
+
+image:
+  repository: nginx
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  hostname: "" # we’ll use nip.io for testing
+  path: /
