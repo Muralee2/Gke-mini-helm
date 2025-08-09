@@ -1,4 +1,4 @@
-name: Deploy Microservice to GKE
+name: Deploy Microservice to GKE with Static IP
 
 on:
   workflow_dispatch:
@@ -6,8 +6,8 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
-  CLUSTER_ZONE: ${{ secrets.GKE_CLUSTER_ZONE }}         # e.g., us-central1-a
-  STATIC_IP_REGION: ${{ secrets.GKE_STATIC_IP_REGION }} # e.g., us-central1
+  CLUSTER_ZONE: ${{ secrets.GKE_CLUSTER_ZONE }}
+  STATIC_IP_REGION: ${{ secrets.GKE_STATIC_IP_REGION }}
   STATIC_IP_NAME: ${{ secrets.GKE_STATIC_IP_NAME }}
   RELEASE_NAME: microservice
   NAMESPACE: default
@@ -17,51 +17,81 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
+    # 1. Checkout
+    - name: Checkout code
       uses: actions/checkout@v4
 
+    # 2. Auth to GCP
     - name: Authenticate to Google Cloud
       uses: google-github-actions/auth@v2
       with:
         credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Set up gcloud CLI
+    # 3. Setup gcloud
+    - name: Set up gcloud
       uses: google-github-actions/setup-gcloud@v2
       with:
         project_id: ${{ env.PROJECT_ID }}
         export_default_credentials: true
 
-    - name: Install GKE gcloud auth plugin
+    # 4. Install GKE auth plugin
+    - name: Install GKE auth plugin
       run: |
         gcloud components install gke-gcloud-auth-plugin --quiet
-        echo "export USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
+        echo "USE_GKE_GCLOUD_AUTH_PLUGIN=True" >> $GITHUB_ENV
 
-    - name: Get GKE Credentials
+    # 5. Get GKE credentials
+    - name: Get GKE credentials
       run: |
         gcloud container clusters get-credentials $CLUSTER_NAME \
           --zone $CLUSTER_ZONE \
           --project $PROJECT_ID
 
+    # 6. Get static IP from GCP
     - name: Get Static IP Address
       id: get-ip
       run: |
         IP_ADDRESS=$(gcloud compute addresses describe $STATIC_IP_NAME \
           --region $STATIC_IP_REGION \
           --format="value(address)")
+        if [ -z "$IP_ADDRESS" ]; then
+          echo "❌ Static IP not found"
+          exit 1
+        fi
         echo "STATIC_IP=$IP_ADDRESS" >> $GITHUB_ENV
-        echo "Using Static IP: $IP_ADDRESS"
+        echo "✅ Using Static IP: $IP_ADDRESS"
 
+    # 7. Install ingress-nginx with static IP
+    - name: Install ingress-nginx with Static IP
+      run: |
+        helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+        helm repo update
+        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+          --namespace ingress-nginx \
+          --create-namespace \
+          --set controller.service.loadBalancerIP=${STATIC_IP} \
+          --set controller.service.annotations."networking\.gke\.io/load-balancer-type"="External"
+
+    # 8. Install Helm
     - name: Install Helm
       uses: azure/setup-helm@v4
 
-    - name: Deploy Microservice via Helm
+    # 9. Deploy microservice via Helm
+    - name: Deploy microservice
       run: |
         helm upgrade --install $RELEASE_NAME ./helm/microservice \
           --namespace $NAMESPACE \
           --create-namespace \
           --set ingress.enabled=true \
           --set ingress.className=nginx \
-          --set ingress.annotations."kubernetes\.io/ingress\.global-static-ip-name"=$STATIC_IP_NAME \
-          --set ingress.hosts[0].host=${STATIC_IP}.nip.io
-    - name: Show Nginx URL
-      run: echo "Nginx available at http://${{ env.STATIC_IP }}.nip.io"
+          --set ingress.hosts[0].host=${STATIC_IP}.nip.io \
+          --set ingress.hosts[0].paths[0].path="/" \
+          --set ingress.hosts[0].paths[0].pathType=Prefix
+
+    # 10. Verify deployment
+    - name: Verify Deployment
+      run: |
+        echo "⏳ Waiting for pods to be ready..."
+        kubectl rollout status deployment/$RELEASE_NAME -n $NAMESPACE --timeout=120s
+        kubectl get pods,svc,ingress -n $NAMESPACE
+        echo "🌐 Test URL: http://${STATIC_IP}.nip.io"
