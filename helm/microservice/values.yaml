@@ -1,9 +1,11 @@
-replicaCount: 1
+replicaCount: 3
 
 image:
-  repository: nginx
-  tag: latest
+  repository: python
+  tag: "3.11"
   pullPolicy: IfNotPresent
+
+command: ["python", "-m", "http.server", "80"]
 
 service:
   port: 80
@@ -11,5 +13,5 @@ service:
 ingress:
   enabled: true
   className: nginx
-  hostname: "" # we’ll use nip.io for testing
+  hostname: "" # workflow will inject nip.io hostname
   path: /
