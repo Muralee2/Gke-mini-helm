@@ -63,4 +63,5 @@ jobs:
           --set ingress.className=nginx \
           --set ingress.annotations."kubernetes\.io/ingress\.global-static-ip-name"=$STATIC_IP_NAME \
           --set ingress.hosts[0].host=${STATIC_IP}.nip.io
-
+    - name: Show Nginx URL
+      run: echo "Nginx available at http://${{ env.STATIC_IP }}.nip.io"
